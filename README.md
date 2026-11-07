@@ -35,8 +35,8 @@ Before deploying, edit [`infrastructure/lib/config.ts`](./infrastructure/lib/con
 | `executionRoleName` | ECS task execution role name (referenced in Dockerrun.aws.json). |
 | `solutionStackName` | Beanstalk platform version. |
 | `githubRepository` | owner/repo of the GitHub repository allowed to assume the CI role. |
-| `githubOrgId` | Numeric GitHub organization ID (Settings → Actions → OIDC). |
-| `githubRepoId` | Numeric GitHub repository ID (same page). |
+| `githubOrgId` | Numeric ID of the repository owner, user or organization (Settings → Actions → OIDC). | 
+| `githubRepoId` | Numeric ID of the repository (same page). |
 | `environment` | Tag value for Environment (e.g. test, prod). |
 
 Repositories now use an immutable `sub` claim that includes these numeric IDs, so they are required for the CI role's trust policy.
