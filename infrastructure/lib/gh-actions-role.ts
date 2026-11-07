@@ -94,5 +94,19 @@ export class GithubActionsRole extends Construct {
         this.role.addManagedPolicy(
             iam.ManagedPolicy.fromAwsManagedPolicyName('AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy')
         );
+
+        // UpdateEnvironment registers a new ECS task definition, which requires passing
+        // the execution role to ECS.
+        this.role.addToPolicy(
+            new iam.PolicyStatement({
+                actions: ['iam:PassRole'],
+                resources: [
+                    `arn:aws:iam::${stack.account}:role/${config.executionRoleName}`,
+                ],
+                conditions: {
+                    StringEquals: { 'iam:PassedToService': 'ecs-tasks.amazonaws.com' },
+                },
+            }),
+        );
     }
 }
