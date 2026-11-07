@@ -42,11 +42,12 @@ export class GithubActionsRole extends Construct {
         ];
 
         // We restrict that only workflows on the main branch of this repository can assume the role.
-        this.role = new iam.Role(this, 'Role', {
-            description: 'Assumed by GitHub Actions to push images and deploy to Elastic Beanstalk',
+        this.role = new iam.Role(this, "Role", {
+            roleName: "dbb-software-test-task-github-actions",
+            description: "Assumed by GitHub Actions to push images and deploy to Elastic Beanstalk",
             assumedBy: new iam.WebIdentityPrincipal(provider.oidcProviderArn, {
                 StringEquals: {
-                    [`${GITHUB_OIDC_HOST}:aud`]: 'sts.amazonaws.com',
+                    [`${GITHUB_OIDC_HOST}:aud`]: "sts.amazonaws.com",
                     [`${GITHUB_OIDC_HOST}:sub`]: subClaims,
                 },
             }),
