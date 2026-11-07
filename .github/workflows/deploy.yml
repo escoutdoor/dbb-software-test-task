@@ -1,0 +1,142 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - app/**
+      - eb/**
+      - .github/workflows/deploy.yml
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  ECR_REPOSITORY: dbb-software-test-task-app
+  EB_APPLICATION: dbb-software-test-task
+  EB_ENVIRONMENT: dbb-software-test-task-env
+  EXECUTION_ROLE_NAME: dbb-software-test-task-exec
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        id: aws
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push the image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE_URI="$REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA"
+          # Tags are immutable, so a re-run for the same commit must not push again.
+          EXISTING=$(aws ecr batch-get-image \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="$GITHUB_SHA" \
+            --query 'length(images)' --output text)
+          if [ "$EXISTING" = "0" ]; then
+            docker build --tag "$IMAGE_URI" app
+            docker push "$IMAGE_URI"
+          else
+            echo "Image for $GITHUB_SHA already exists, skipping the build."
+          fi
+          echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
+
+      - name: Create the application version
+        env:
+          ACCOUNT_ID: ${{ steps.aws.outputs.aws-account-id }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          export EXECUTION_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${EXECUTION_ROLE_NAME}"
+          export IMAGE_URI
+
+          mkdir bundle
+          envsubst '${IMAGE_URI} ${EXECUTION_ROLE_ARN}' \
+            < eb/Dockerrun.aws.json.tpl > bundle/Dockerrun.aws.json
+          (cd bundle && zip --quiet ../bundle.zip Dockerrun.aws.json)
+
+          VERSION_LABEL="${GITHUB_SHA::12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          BUCKET="${EB_APPLICATION}-bundles-${ACCOUNT_ID}-${AWS_REGION}"
+          aws s3 cp bundle.zip "s3://${BUCKET}/${VERSION_LABEL}.zip"
+          aws elasticbeanstalk create-application-version \
+            --application-name "$EB_APPLICATION" \
+            --version-label "$VERSION_LABEL" \
+            --source-bundle "S3Bucket=${BUCKET},S3Key=${VERSION_LABEL}.zip"
+          echo "VERSION_LABEL=$VERSION_LABEL" >> "$GITHUB_ENV"
+
+      - name: Deploy to Elastic Beanstalk
+        run: |
+          aws elasticbeanstalk update-environment \
+            --application-name "$EB_APPLICATION" \
+            --environment-name "$EB_ENVIRONMENT" \
+            --version-label "$VERSION_LABEL"
+
+          # Poll until Ready or timeout (max 15 minutes).
+          ATTEMPT=0
+          while [ $ATTEMPT -lt 30 ]; do
+            STATUS=$(aws elasticbeanstalk describe-environments \
+              --application-name "$EB_APPLICATION" \
+              --environment-names "$EB_ENVIRONMENT" \
+              --query 'Environments[0].Status' --output text)
+            if [ "$STATUS" = "Ready" ]; then
+              break
+            fi
+            echo "Attempt $ATTEMPT: status=$STATUS, sleeping 30s..."
+            sleep 30
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+          if [ "$STATUS" != "Ready" ]; then
+            echo "Environment did not become Ready in time (last status: $STATUS)."
+            exit 1
+          fi
+
+          # Ready is also reported when a failed deployment was rolled back, so check the version too.
+          DEPLOYED=$(aws elasticbeanstalk describe-environments \
+            --application-name "$EB_APPLICATION" \
+            --environment-names "$EB_ENVIRONMENT" \
+            --query 'Environments[0].VersionLabel' --output text)
+          if [ "$DEPLOYED" != "$VERSION_LABEL" ]; then
+            echo "Expected version $VERSION_LABEL, but $DEPLOYED is deployed."
+            exit 1
+          fi
+
+      - name: Smoke test
+        run: |
+          CNAME=$(aws elasticbeanstalk describe-environments \
+            --application-name "$EB_APPLICATION" \
+            --environment-names "$EB_ENVIRONMENT" \
+            --query 'Environments[0].CNAME' --output text)
+
+          echo "Testing /health..."
+          curl --fail --silent --show-error \
+            --retry 10 --retry-delay 10 --retry-all-errors \
+            --output /tmp/health.json "http://${CNAME}/health"
+          cat /tmp/health.json
+          grep -q '"status":"healthy"' /tmp/health.json
+
+          echo "Testing /db-test..."
+          curl --fail --silent --show-error \
+            --retry 10 --retry-delay 10 --retry-all-errors \
+            --output /tmp/dbtest.json "http://${CNAME}/db-test"
+          cat /tmp/dbtest.json
+          grep -q '"db":"connected"' /tmp/dbtest.json
+
+          echo "Both endpoints are ready."
