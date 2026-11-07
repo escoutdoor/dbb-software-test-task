@@ -7,7 +7,6 @@ export const config = {
     executionRoleName: "dbb-software-test-task-exec",
     // Override with: cdk deploy -c solutionStackName="..."
     solutionStackName: "64bit Amazon Linux 2023 v4.8.1 running ECS",
-    // Override with: cdk deploy -c githubRepository=owner/repo
     githubRepository: "escoutdoor/dbb-software-test-task",
 
     // GitHub OIDC IDs (Settings → Actions → OIDC).

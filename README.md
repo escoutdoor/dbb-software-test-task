@@ -39,6 +39,8 @@ Before deploying, edit [`infrastructure/lib/config.ts`](./infrastructure/lib/con
 | `githubRepoId` | Numeric GitHub repository ID (same page). |
 | `environment` | Tag value for Environment (e.g. test, prod). |
 
+Repositories now use an immutable `sub` claim that includes these numeric IDs, so they are required for the CI role's trust policy.
+
 ## What CDK creates
 
 - **EcrStack**: ECR repository (scan on push, immutable tags, keeps the last 10 images).
@@ -107,8 +109,7 @@ A provider created by this stack is deleted by `cdk destroy`. A reused provider 
 ### Optional context values
 
 | Context | Purpose |
-|---|---|
-| `-c githubRepository=owner/repo` | Repository allowed to assume the CI role (default in `infrastructure/lib/config.ts`) |
+| --- | --- |
 | `-c githubOidcProviderArn=arn:...` | Reuse an existing GitHub OIDC provider (see above) |
 | `-c solutionStackName="..."` | Use another Beanstalk platform version |
 
@@ -151,6 +152,8 @@ curl localhost:8080/health
 
 See [`/docs/screenshots`](./docs/screenshots/):
 
+Elastic Beanstalk's ECS platform creates an ECS cluster and runs the containers as tasks on it; it does not create an ECS service, so the screenshot shows the running tasks.
+
 * ecs-tasks.png — ECS tasks running under the Beanstalk cluster.
 * rds.png — RDS instance, Available.
 * health.png — curl /health output.
@@ -191,4 +194,4 @@ This is a demo configuration. For production:
 - Add an ACM certificate and an HTTPS listener. Beanstalk creates the HTTP (80) listener by default, but the HTTPS (443) listener must be added explicitly with a certificate ARN through `aws:elbv2:listener:443` option settings, and port 443 opened on the load balancer security group (it is closed here because there is no certificate).
 - Enable RDS Multi-AZ, deletion protection and longer backup retention, and remove the `DESTROY` removal policies.
 - Add NAT gateways or VPC endpoints and move the instances into private subnets.
-- Scope the CI role further once the deployment flow is stable.
+- The CI role currently uses the AWS-managed `AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy` for S3 bucket operations during `UpdateEnvironment`. This is the broadest permission in the project and should be scoped to specific `elasticbeanstalk-*` bucket ARNs once the deployment flow is stable.
