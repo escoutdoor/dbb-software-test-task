@@ -91,23 +91,8 @@ export class GithubActionsRole extends Construct {
             }),
         );
 
-        // Beanstalk stores CloudFormation templates and source bundles in S3 buckets
-        // matching `elasticbeanstalk-*`. The first UpdateEnvironment creates the bucket.
-        this.role.addToPolicy(
-            new iam.PolicyStatement({
-                actions: [
-                    's3:CreateBucket',
-                    's3:GetBucketPolicy',
-                    's3:GetObject',
-                    's3:ListBucket',
-                    's3:PutBucketPolicy',
-                    's3:PutObject',
-                ],
-                resources: [
-                    `arn:aws:s3:::elasticbeanstalk-*`,
-                    `arn:aws:s3:::elasticbeanstalk-*/*`,
-                ],
-            }),
+        this.role.addManagedPolicy(
+            iam.ManagedPolicy.fromAwsManagedPolicyName('AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy')
         );
     }
 }
