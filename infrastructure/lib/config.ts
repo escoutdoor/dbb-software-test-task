@@ -10,5 +10,10 @@ export const config = {
     // Override with: cdk deploy -c githubRepository=owner/repo
     githubRepository: "escoutdoor/dbb-software-test-task",
 
+    // GitHub OIDC IDs (Settings → Actions → OIDC).
+    // Immutable across renames — safe to keep here as project constants.
+    githubOrgId: "116205876",
+    githubRepoId: "1448589462",
+
     environment: "test",
 } as const;

@@ -26,7 +26,9 @@ if (imageTag) {
         env,
         repository: ecrStack.repository,
         imageTag,
-        githubRepository: (app.node.tryGetContext("githubRepository") as string | undefined) ?? config.githubRepository,
+        githubRepository: (app.node.tryGetContext('githubRepository') as string | undefined) ?? config.githubRepository,
+        githubOrgId: config.githubOrgId,
+        githubRepoId: config.githubRepoId,
         existingOidcProviderArn: app.node.tryGetContext("githubOidcProviderArn") as string | undefined,
     });
 }

@@ -17,6 +17,8 @@ interface BeanstalkStackProps extends cdk.StackProps {
     repository: ecr.IRepository;
     imageTag: string;
     githubRepository: string;
+    githubOrgId: string;
+    githubRepoId: string;
     existingOidcProviderArn?: string;
 }
 
@@ -134,10 +136,12 @@ export class BeanstalkStack extends cdk.Stack {
         // The container reads the secret on start, so the database must exist first.
         environment.node.addDependency(database);
 
-        const githubActionsRole = new GithubActionsRole(this, "GithubActionsRole", {
+        const githubActionsRole = new GithubActionsRole(this, 'GithubActionsRole', {
             repository: props.repository,
             bundleBucket,
             githubRepository: props.githubRepository,
+            githubOrgId: props.githubOrgId,
+            githubRepoId: props.githubRepoId,
             existingOidcProviderArn: props.existingOidcProviderArn,
         });
 

@@ -9,6 +9,8 @@ interface GithubActionsRoleProps {
     repository: ecr.IRepository;
     bundleBucket: s3.IBucket;
     githubRepository: string;
+    githubOrgId: string;
+    githubRepoId: string;
     // Set when the account already has a GitHub OIDC provider (only one per account is allowed).
     existingOidcProviderArn?: string;
 }
@@ -28,12 +30,25 @@ export class GithubActionsRole extends Construct {
                 clientIds: ["sts.amazonaws.com"],
             });
 
+        // GitHub OIDC `sub` claim has two formats:
+        // - Pre-July 2026 (classic): repo:org/repo:ref:refs/heads/main
+        // - Post-July 2026 (immutable IDs, default for new repos):
+        //   repo:org@<ORG_ID>/repo@<REPO_ID>:ref:refs/heads/main
+        // StringEquals with an array matches either (logical OR), with no wildcards.
+        const [org, repo] = props.githubRepository.split('/');
+        const subClaims = [
+            `repo:${props.githubRepository}:ref:refs/heads/main`,
+            `repo:${org}@${props.githubOrgId}/${repo}@${props.githubRepoId}:ref:refs/heads/main`,
+        ];
+
         // We restrict that only workflows on the main branch of this repository can assume the role.
-        this.role = new iam.Role(this, "Role", {
-            description: "Assumed by GitHub Actions to push images and deploy to Elastic Beanstalk",
+        this.role = new iam.Role(this, 'Role', {
+            description: 'Assumed by GitHub Actions to push images and deploy to Elastic Beanstalk',
             assumedBy: new iam.WebIdentityPrincipal(provider.oidcProviderArn, {
-                StringEquals: { [`${GITHUB_OIDC_HOST}:aud`]: "sts.amazonaws.com" },
-                StringLike: { [`${GITHUB_OIDC_HOST}:sub`]: `repo:${props.githubRepository}:ref:refs/heads/main` },
+                StringEquals: {
+                    [`${GITHUB_OIDC_HOST}:aud`]: 'sts.amazonaws.com',
+                    [`${GITHUB_OIDC_HOST}:sub`]: subClaims,
+                },
             }),
         });
 
